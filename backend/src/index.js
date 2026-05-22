@@ -5,7 +5,7 @@ const githubRoutes = require('./routes/github');
 const postsRoutes = require('./routes/posts');
 const blogRoutes = require('./routes/blog');
 const errorHandler = require('./middleware/errorHandler');
-const { initDb } = require('./services/dbService');
+const { initDb } = require('./repositories/postRepository');
 
 const app = express();
 const PORT = process.env.PORT || 3001;
