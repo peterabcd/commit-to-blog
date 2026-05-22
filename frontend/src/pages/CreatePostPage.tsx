@@ -1,54 +1,44 @@
-import { useState } from 'react';
+import { useReducer } from 'react';
 import { useNavigate } from 'react-router-dom';
 import RepoSelector from '../components/RepoSelector';
 import BranchSelector from '../components/BranchSelector';
 import CommitList from '../components/CommitList';
 import BlogEditor from '../components/BlogEditor';
 import { generateBlog, createPost } from '../api/posts';
-import type { Repository, CommitRef } from '../types';
+import { wizardReducer, initialWizardState } from './wizardReducer';
 
 const STEPS = ['저장소 선택', '브랜치 선택', '커밋 선택', '초안 편집'];
 
 export default function CreatePostPage() {
   const navigate = useNavigate();
-  const [step, setStep] = useState(0);
-  const [repo, setRepo] = useState<Repository | null>(null);
-  const [branch, setBranch] = useState('');
-  const [commits, setCommits] = useState<CommitRef[]>([]);
-  const [title, setTitle] = useState('');
-  const [body, setBody] = useState('');
-  const [summary, setSummary] = useState('');
-  const [generating, setGenerating] = useState(false);
-  const [saving, setSaving] = useState(false);
+  const [state, dispatch] = useReducer(wizardReducer, initialWizardState);
+  const { step, repo, branch, commits, title, body, generating, saving } = state;
 
   const [owner, repoName] = repo ? repo.fullName.split('/') : ['', ''];
 
   const handleGenerate = async () => {
     if (!repo || !branch || commits.length === 0) return;
-    setGenerating(true);
+    dispatch({ type: 'SET_GENERATING', value: true });
     try {
       const draft = await generateBlog({ repoFullName: repo.fullName, branch, commitShas: commits.map(c => c.sha) });
-      setTitle(draft.title);
-      setBody(draft.body);
-      setSummary(draft.summary);
-      setStep(3);
+      dispatch({ type: 'SET_DRAFT', title: draft.title, body: draft.body, summary: draft.summary });
     } catch (e: any) {
       alert(`생성 실패: ${e.message}`);
     } finally {
-      setGenerating(false);
+      dispatch({ type: 'SET_GENERATING', value: false });
     }
   };
 
   const handleSave = async () => {
     if (!repo) return;
-    setSaving(true);
+    dispatch({ type: 'SET_SAVING', value: true });
     try {
-      await createPost({ title, body, summary, repo_name: repo.fullName, branch, commits, tags: [] });
+      await createPost({ title, body, summary: state.summary, repo_name: repo.fullName, branch, commits, tags: [] });
       navigate('/');
     } catch (e: any) {
       alert(`저장 실패: ${e.message}`);
     } finally {
-      setSaving(false);
+      dispatch({ type: 'SET_SAVING', value: false });
     }
   };
 
@@ -70,24 +60,24 @@ export default function CreatePostPage() {
       {step === 0 && (
         <div>
           <h2 className="text-lg font-semibold mb-4">GitHub 저장소를 선택하세요</h2>
-          <RepoSelector onSelect={r => { setRepo(r); setStep(1); }} />
+          <RepoSelector onSelect={r => dispatch({ type: 'SELECT_REPO', repo: r })} />
         </div>
       )}
 
       {step === 1 && repo && (
         <div>
           <h2 className="text-lg font-semibold mb-4">{repo.fullName} — 브랜치 선택</h2>
-          <BranchSelector owner={owner} repo={repoName} onSelect={b => { setBranch(b); setStep(2); }} />
-          <button onClick={() => setStep(0)} className="mt-4 text-sm text-gray-400 hover:text-gray-600">← 뒤로</button>
+          <BranchSelector owner={owner} repo={repoName} onSelect={b => dispatch({ type: 'SELECT_BRANCH', branch: b })} />
+          <button onClick={() => dispatch({ type: 'GO_BACK' })} className="mt-4 text-sm text-gray-400 hover:text-gray-600">← 뒤로</button>
         </div>
       )}
 
       {step === 2 && (
         <div>
           <h2 className="text-lg font-semibold mb-4">{branch} — 분석할 커밋 선택</h2>
-          <CommitList owner={owner} repo={repoName} branch={branch} onSelectionChange={setCommits} />
+          <CommitList owner={owner} repo={repoName} branch={branch} onSelectionChange={c => dispatch({ type: 'SET_COMMITS', commits: c })} />
           <div className="flex items-center gap-3 mt-4">
-            <button onClick={() => setStep(1)} className="text-sm text-gray-400 hover:text-gray-600">← 뒤로</button>
+            <button onClick={() => dispatch({ type: 'GO_BACK' })} className="text-sm text-gray-400 hover:text-gray-600">← 뒤로</button>
             <button
               onClick={handleGenerate}
               disabled={commits.length === 0 || generating}
@@ -102,9 +92,14 @@ export default function CreatePostPage() {
       {step === 3 && (
         <div>
           <h2 className="text-lg font-semibold mb-4">초안 편집</h2>
-          <BlogEditor title={title} body={body} onTitleChange={setTitle} onBodyChange={setBody} />
+          <BlogEditor
+            title={title}
+            body={body}
+            onTitleChange={t => dispatch({ type: 'SET_TITLE', title: t })}
+            onBodyChange={b => dispatch({ type: 'SET_BODY', body: b })}
+          />
           <div className="flex items-center gap-3 mt-6">
-            <button onClick={() => setStep(2)} className="text-sm text-gray-400 hover:text-gray-600">← 뒤로</button>
+            <button onClick={() => dispatch({ type: 'GO_BACK' })} className="text-sm text-gray-400 hover:text-gray-600">← 뒤로</button>
             <button
               onClick={handleSave}
               disabled={saving || !title}
